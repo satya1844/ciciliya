@@ -1,0 +1,4 @@
+ddgs>=9.6.0
+requests>=2.32.0
+readability-lxml>=0.8.1
+beautifulsoup4>=4.12.0
