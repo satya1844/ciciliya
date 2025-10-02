@@ -30,9 +30,13 @@ def interactive():
         if not results:
             continue
         choice = input("Enter the result number to scrape (or 'n' to skip): ").strip()
+        if choice.lower() == 'n':
+            continue
+        
         if not choice.isdigit():
             print("Please enter a valid number.")
             continue
+        
         
         idx = int(choice) - 1
         if 0 <= idx < len(results):
@@ -48,11 +52,7 @@ def interactive():
                 print(f"Scrape failed: {e}")
         else:
             print("Out of range.")
-
-       
-
-
-
+            continue
 def main():
     parser = argparse.ArgumentParser(description="Real-Time Browsing Chatbot")
     parser.add_argument('--query', '-q', type=str, help='Search query')
