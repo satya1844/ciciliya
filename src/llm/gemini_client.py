@@ -105,3 +105,31 @@ class GeminiClient:
             return (getattr(resp, "text", None) or "").strip()
         except Exception as e:
             return f"LLM error: {e}"
+
+async def get_gemini_response(user_prompt: str, context: str) -> str:
+    """
+    Generates a response from the Gemini model.
+    Raises an exception if the API call fails.
+    """
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        prompt = f"""
+        You are a helpful AI assistant that answers questions based on the provided context.
+        Your answer must be grounded in the information given in the "CONTEXT" section.
+        Do not use any information outside of the provided context.
+        If the context does not contain the answer, say "I'm sorry, I couldn't find an answer in the provided sources."
+
+        CONTEXT:
+        {context}
+
+        QUESTION:
+        {user_prompt}
+
+        ANSWER:
+        """
+        response = await model.generate_content_async(prompt)
+        return response.text
+    except Exception as e:
+        print(f"LLM error: {e}")
+        # Re-raise the exception to be handled by the caller
+        raise e

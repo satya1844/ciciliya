@@ -1,13 +1,11 @@
 import argparse
 import time
-from typing import List, Dict
-# import numpy as np
-from ..search.ddg_search import search_web
-from ..scraper.scraper import scrape_url
+from typing import List, Dict, Optional, AsyncGenerator
+from ..search.serper_search import search_serper
+from ..scraper.scraper import scrape_url  # Corrected import
 from ..utils.chunking import chunk_text
-from ..llm.gemini_client import GeminiClient
-from ..llm.groq_client import GroqClient
-
+# Switch from Gemini to Groq
+from ..llm.groq_client import get_groq_response, get_groq_response_stream
 from ..vector_store.chroma_db import ChromaDBManager
 from langchain.docstore.document import Document as LangchainDocument
  
@@ -19,26 +17,31 @@ from langchain.docstore.document import Document as LangchainDocument
 #     b_norm = b / (np.linalg.norm(b, axis=1, keepdims=True) + 1e-12)
 #     return a_norm @ b_norm.T
 
-def run_rag(query: str, max_results: int = 5, top_docs: int = 3, top_chunks: int = 8, provider: str = "gemini"):
+async def run_rag(query: str, max_results: int = 3) -> Optional[Dict]:
     start_time = time.time()
     last_step_time = start_time
+    
+    # Define constants that were previously passed as CLI args
+    top_docs_to_scrape = max_results
+    top_chunks_for_context = 8
 
     # 1. Search
     print(f"[{time.time() - start_time:.2f}s] 1. Searching for '{query}'...")
-    results = search_web(query, max_results=max_results)
+    results = search_serper(query, max_results=max_results)
     if not results:
         print("No results found.")
-        return
+        return None
     print(f"   -> Search complete in {time.time() - last_step_time:.2f}s. Found {len(results)} results.")
     last_step_time = time.time()
 
     # 2. Scrape
-    print(f"[{time.time() - start_time:.2f}s] 2. Scraping top {top_docs} documents...")
+    print(f"[{time.time() - start_time:.2f}s] 2. Scraping top {top_docs_to_scrape} documents...")
     docs: List[Dict] = []
-    for r in results[:top_docs]:
+    for r in results[:top_docs_to_scrape]:
         url = r["url"]
+        if not url: continue
         try:
-            article = scrape_url(url)
+            article = scrape_url(url) # Corrected function call
             text = (article.get("text") or "").strip()
             if text:
                 docs.append({"url": url, "title": article.get("title", "") or r.get("title",""), "text": text})
@@ -48,7 +51,7 @@ def run_rag(query: str, max_results: int = 5, top_docs: int = 3, top_chunks: int
 
     if not docs:
         print("Failed to scrape any documents.")
-        return
+        return None
     print(f"   -> Scraping complete in {time.time() - last_step_time:.2f}s. Got {len(docs)} documents.")
     last_step_time = time.time()
 
@@ -61,45 +64,115 @@ def run_rag(query: str, max_results: int = 5, top_docs: int = 3, top_chunks: int
             all_docs.append(LangchainDocument(page_content=ch, metadata={"url": d["url"], "title": d["title"]}))
     if not all_docs:
         print("No chunks produced.")
-        return
+        return None
     print(f"   -> Chunking complete in {time.time() - last_step_time:.2f}s. Produced {len(all_docs)} chunks.")
+    last_step_time = time.time()
 
     # 4. Embed & retrieve with ChromaDB
     print(f"[{time.time() - start_time:.2f}s] 4. Embedding & retrieving with ChromaDB...")
     db_manager = ChromaDBManager()
-
     db_manager.add_documents(all_docs)
-
-    query_results: List[str] = db_manager.query(query, n_results=top_chunks)
-
-    top_contexts = query_results
-
-    # Extract unique sources from the metadata of retrieved documents
-    # top_sources = [doc.metadata['url'] for doc in query_results if 'url' in doc.metadata]
-    # Since we can't get metadata from the query results, we'll rely on the initial docs for sources.
-    top_sources = [d["url"] for d in docs]
-
+    retrieved_chunks: List[Document] = db_manager.query(query, n_results=top_chunks_for_context)
+    
+    # Prepare context and sources for the LLM
+    context = "\n\n".join([doc.page_content for doc in retrieved_chunks])
+    
+    # Deduplicate sources based on URL
+    unique_sources = {doc.metadata['url']: doc.metadata for doc in retrieved_chunks}
+    sources = list(unique_sources.values())
 
     print(f"   -> Embedding & Retrieval complete in {time.time() - last_step_time:.2f}s.")
     last_step_time = time.time()
 
-    print(f"[{time.time() - start_time:.2f}s] 5. Generating answer with {provider.upper()}...")
-    if provider.lower() == "groq":
-        llm = GroqClient()
-        answer = llm.answer(query, top_contexts)
-    else:
-        client = GeminiClient()
-        answer = client.answer(query, top_contexts)
-    print(f"   -> Generation complete in {time.time() - last_step_time:.2f}s.")
+    # 5. Generate with Groq
+    print(f"[{time.time() - start_time:.2f}s] 5. Generating answer with GROQ...")
+    prompt = f"Answer the following question: {query}"
+    
+    try:
+        # Call the Groq function
+        answer = await get_groq_response(prompt, context)
+        print(f"   -> Generation complete in {time.time() - last_step_time:.2f}s.")
+    except Exception as e:
+        print(f"   -> Generation failed: {e}")
+        answer = "Sorry, I was unable to generate an answer due to a temporary issue with the AI service. Please try again later."
 
-    print("\n=== Answer ===\n")
-    print((answer or "").strip())
-    print("\n=== Sources ===")
-    for i, url in enumerate(dict.fromkeys(top_sources), start=1):
-        print(f"[{i}] {url}")
+    return {
+        "answer": answer,
+        "sources": [{"url": s.get('url', ''), "title": s.get('title', '')} for s in sources]
+    }
 
-    print(f"\n--- Total execution time: {time.time() - start_time:.2f}s ---")
+async def run_rag_stream(query: str, max_results: int = 3) -> AsyncGenerator[Dict, None]:
+    start_time = time.time()
+    last_step_time = start_time
+    
+    # Define constants that were previously passed as CLI args
+    top_docs_to_scrape = max_results
+    top_chunks_for_context = 8
 
+    # 1. Search
+    print(f"[{time.time() - start_time:.2f}s] 1. Searching for '{query}'...")
+    results = search_serper(query, max_results=max_results)
+    if not results:
+        yield {"type": "error", "data": "Could not find any sources."}
+        return
+    print(f"   -> Search complete in {time.time() - last_step_time:.2f}s. Found {len(results)} results.")
+    last_step_time = time.time()
+
+    # 2. Scrape
+    print(f"[{time.time() - start_time:.2f}s] 2. Scraping top {top_docs_to_scrape} documents...")
+    docs: List[Dict] = []
+    for r in results[:top_docs_to_scrape]:
+        url = r["url"]
+        if not url: continue
+        try:
+            article = scrape_url(url) # Corrected function call
+            text = (article.get("text") or "").strip()
+            if text:
+                docs.append({"url": url, "title": article.get("title", "") or r.get("title",""), "text": text})
+                print(f"   - Scraped: {url}")
+        except Exception as e:
+            print(f"   - Failed to scrape {url}: {e}")
+
+    if not docs:
+        yield {"type": "error", "data": "Failed to scrape any documents."}
+        return
+    print(f"   -> Scraping complete in {time.time() - last_step_time:.2f}s. Got {len(docs)} documents.")
+    last_step_time = time.time()
+
+    # 3. Chunk
+    print(f"[{time.time() - start_time:.2f}s] 3. Chunking documents...")
+    all_docs:List[LangchainDocument] = []
+  
+    for d in docs:
+        for ch in chunk_text(d["text"],max_words=220, overlap=40):
+            all_docs.append(LangchainDocument(page_content=ch, metadata={"url": d["url"], "title": d["title"]}))
+    if not all_docs:
+        yield {"type": "error", "data": "No chunks produced."}
+        return
+    print(f"   -> Chunking complete in {time.time() - last_step_time:.2f}s. Produced {len(all_docs)} chunks.")
+    last_step_time = time.time()
+
+    # 4. Embed & retrieve with ChromaDB
+    print(f"[{time.time() - start_time:.2f}s] 4. Embedding & retrieving with ChromaDB...")
+    db_manager = ChromaDBManager()
+    db_manager.add_documents(all_docs)
+    retrieved_chunks: List[Document] = db_manager.query(query, n_results=top_chunks_for_context)
+    
+    # Prepare context and sources for the LLM
+    context = "\n\n".join([doc.page_content for doc in retrieved_chunks])
+    
+    # Deduplicate sources based on URL
+    unique_sources = {doc.metadata['url']: doc.metadata for doc in retrieved_chunks}
+    sources = list(unique_sources.values())
+
+    print(f"   -> Embedding & Retrieval complete in {time.time() - last_step_time:.2f}s.")
+    last_step_time = time.time()
+
+    # 5. Generate and Stream Answer with Groq
+    prompt = f"Answer the following question: {query}"
+    # Call the Groq stream function
+    async for token in get_groq_response_stream(prompt, context):
+        yield {"type": "token", "data": token}
 
 def main():
     # ... existing code ...
@@ -114,4 +187,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+
