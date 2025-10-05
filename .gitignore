@@ -59,3 +59,26 @@ out/
 # Temporary files
 *.tmp
 *.temp
+
+*.sqlite3
+# Compiled Python files
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# pytest cache
+.pytest_cache/
+
+# virtualenv
+.venv/
+venv/
+env/

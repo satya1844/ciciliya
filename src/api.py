@@ -149,12 +149,10 @@ async def stream_endpoint(request: QueryRequest):
             answer = result.get("answer", "Sorry, I couldn't find an answer.")
             sources = result.get("sources", [])
             
-            # Stream answer word by word (or token by token if you have that info)
-            words = answer.split()
-            for i, word in enumerate(words):
-                chunk = word + (" " if i < len(words) - 1 else "")
-                yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
-                await asyncio.sleep(0.02)  # Small delay for streaming effect
+            # Stream the entire answer as a single token to preserve markdown
+            if answer:
+                yield f"data: {json.dumps({'type': 'token', 'content': answer})}\n\n"
+                await asyncio.sleep(0.05)  # Small delay
             
             # Send sources at the end
             formatted_sources = [
