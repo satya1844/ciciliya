@@ -1,0 +1,67 @@
+# Project Review Notes
+
+## Critical Issues & Remedies
+### 1. High Latency in Retrieval (Major)
+- Problem: Rebuilding ChromaDB (scrape, embed, index) on every request causes ~25 s latency.
+- Impact: Breaks “real-time” experience; wastes compute.
+- Immediate Actions:
+  - Persist ChromaDB collections across requests.
+  - Load `all-MiniLM-L6-v2` embeddings once at startup.
+  - Add selective updates for new/expired documents.
+
+### 2. Unreliable External Search (Serper API)
+- Problem: 10 s timeout with no retry allows transient failures to kill the pipeline.
+- Impact: User sees errors on routine network blips.
+- Immediate Actions:
+  - Add exponential-backoff retries (e.g., `tenacity`) around Serper `requests.post`.
+  - Log timeout/HTTP status details for observability.
+
+### 3. LLM Resilience Already Working
+- Observation: Fallback from `llama-3.3-70b-versatile` to `llama-3.1-8b-instant` handled 429 rate limits.
+- Improvement: Catch Groq rate-limit exception class explicitly to keep logs clean.
+
+### 4. Prompt Fit Across Models
+- Concern: Shared system prompt may overfit to 70B model assumptions.
+- Action: Audit prompt instructions for clarity; trim heavy formatting sections if 8B model struggles.
+
+### 5. Real-Time Architecture Gap
+- Goal: Decouple slow (search/scrape/index) from fast (retrieve/generate) stages.
+- Action: Build persistence from item 1, then move scrape/index to background jobs or scheduled refreshes.
+
+## Strengths
+- LLM failover strategy already implemented.
+- Clear streaming endpoint design with source packaging.
+
+## Roadmap: Five Sprints
+### Sprint 1 – Performance & Reliability
+- 1.1 Fix Latency (Caching): Refactor `chat_pipeline.py` initialization to one-time load. Difficulty: Medium; ETA: 1 day.
+- 1.2 Serper API Retries: Wrap search call with `tenacity`. Difficulty: Easy; ETA: 0.5 day.
+- 1.3 Error Logging Cleanup: Normalize exception logging in `groq_client.py` and search/scraper modules. Difficulty: Easy; ETA: 0.5 day.
+- Outcome: Faster requests, resilient to transient API failures.
+
+### Sprint 2 – Advanced Retrieval
+- 2.1 Hybrid Search (BM25): Add `rank_bm25` index alongside ChromaDB. Difficulty: Medium; ETA: 1.5 days.
+- 2.2 Retrieval Fusion (RRF): Merge vector + keyword results via Reciprocal Rank Fusion. Difficulty: Medium; ETA: 1 day.
+- 2.3 Zero-Cost Reranking: Use sentence-transformers cross-encoder to trim top context chunks. Difficulty: Hard; ETA: 2 days.
+- Outcome: Higher context relevance, fewer hallucinations.
+
+### Sprint 3 – Conversation & Intelligence
+- 3.1 Add History Field: Expand FastAPI `QueryRequest` with `chat_history`. Difficulty: Easy; ETA: 0.5 day.
+- 3.2 Query Reformulation: Use 8B model to rewrite latest query with history. Difficulty: Medium; ETA: 1.5 days.
+- 3.3 Agentic Decomposition: Generate sub-queries for complex asks and search in parallel. Difficulty: Hard; ETA: 2 days.
+- Outcome: Handles follow-ups and research-style prompts.
+
+### Sprint 4 – Quality & Validation
+- 4.1 Structured Output (Pydantic): Enforce validated JSON answer schema in Groq client. Difficulty: Medium; ETA: 1 day.
+- 4.2 Advanced Chunking: Switch scraper pipeline to recursive character splitter. Difficulty: Medium; ETA: 1 day.
+- 4.3 Evaluation Setup: Introduce RAGAS or internal metrics for faithfulness/context checks. Difficulty: Medium; ETA: 2 days.
+- Outcome: Auditable, reliable responses with measurable quality.
+
+### Sprint 5 – Documentation & Deployment
+- 5.1 Update README: Document advanced RAG architecture and Groq performance. Difficulty: Medium; ETA: 1 day.
+- 5.2 Frontend Integration: Support `chat_history` and structured answers in React UI. Difficulty: Medium; ETA: 1 day.
+- 5.3 Public Deployment: Launch FastAPI + React stack on free-tier hosting. Difficulty: Medium; ETA: 1 day.
+- Outcome: Portfolio-ready, live demo with comprehensive docs.
+
+## Next Decision
+- Choose starting point: Sprint 1 (performance fixes) or Sprint 2 (hybrid retrieval) depending on immediate priorities.
