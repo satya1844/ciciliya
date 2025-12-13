@@ -1,8 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Jersey+10&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&family=Jersey+10&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-family-jersey: 'Jersey 10', sans-serif;
+  --font-family-google-sans: 'Google Sans', sans-serif;
 }
 
 .jersey-10-regular {
@@ -11,12 +12,53 @@
   font-style: normal;
 }
 
+body {
+  font-family: var(--font-family-google-sans);
+}
+
 /* global.css */
 
 /* Hide scrollbar for webkit browsers */
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+::-webkit-scrollbar {
+  display: none;
+}
+
+
+
+.page {
+  position: relative;
+  background: radial-gradient(
+    circle at top,
+    #1a1a1a,
+    #0e0e0e
+  );
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.noise {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+
+  background-image:
+    repeating-radial-gradient(
+      circle,
+      rgba(255,255,255,0.03) 0,
+      rgba(255,255,255,0.03) 1px,
+      transparent 1px,
+      transparent 2px
+    );
+
+  mix-blend-mode: overlay;
+  opacity: 0.15;
+}
+
+
+
 
 /* Custom Markdown Styling for Chat Messages */
 .markdown-content {
@@ -37,6 +79,7 @@
 
 .markdown-content p {
   margin-bottom: 0.75rem;
+  color : 'red';
 }
 
 .markdown-content ul,
@@ -70,9 +113,28 @@
   line-height: 1.4;
 }
 
+.markdown-content-wrapper{
+  background-color: transparent;
+  color: #f3f4f6;
+  padding: 1rem;
+  border-radius: 0.75rem;
+}
+
 .markdown-content blockquote {
   font-style: italic;
   margin: 1rem 0;
+}
+
+.markdown-content-light blockquote {
+  border-left: 4px solid #d1d5db;
+  padding-left: 1rem;
+  color: #374151;
+}
+
+.markdown-content-dark blockquote {
+  border-left: 4px solid rgba(255, 255, 255, 0.3);
+  padding-left: 1rem;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .markdown-content hr {

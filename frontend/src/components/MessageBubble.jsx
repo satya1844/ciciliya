@@ -1,23 +1,41 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
+
 import { useDarkMode } from '../contexts/DarkModeContext';
 
 const MessageBubble = ({ message, isUser, sources }) => {
   const { isDarkMode } = useDarkMode();
+  const markdownClass = isDarkMode
+    ? 'markdown-content markdown-content-dark'
+    : 'markdown-content markdown-content-light';
 
   if (isUser) {
+    const formattedMessage = (
+      <div className="prose prose-neutral max-w-none">
+      <ReactMarkdown>
+        {message}
+      </ReactMarkdown>
+      </div>
+    );
+
     return (
-      <div className="p-3 rounded-tl-[30px] rounded-bl-[30px] rounded-br-[30px] px-4 bg-[#0057FF] text-white ml-auto text-right w-fit">
-        <p className="text-base">{message}</p>
+      <div className="p-3 rounded-tl-[30px] rounded-bl-[30px] rounded-br-[30px] px-4  text-white ml-auto text-right w-fit">
+        {formattedMessage}
       </div>
     );
   }
 
   return (
     <div className="flex items-start">
-      <div className={`rounded-xl break-words text-left w-[90%] p-3 rounded-tl-[30px] rounded-bl-[30px] rounded-br-[30px] ${
-        isDarkMode ? 'bg-white/10 text-white' : 'bg-gray-100 text-black'
-      }`}>
-        <p className="text-base">{message}</p>
+      <div
+        className={`rounded-xl text-xl break-words text-left w-[90%] p-5 rounded-tl-[30px] rounded-bl-[30px] rounded-br-[30px] `}
+      ><div className="markdown-content-wrapper">
+
+      
+        <ReactMarkdown>
+          {message}
+        </ReactMarkdown>
+        </div>
         
         {/* Display sources if available */}
         {sources && sources.length > 0 && (

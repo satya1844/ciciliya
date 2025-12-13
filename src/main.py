@@ -1,6 +1,13 @@
 import argparse
-from .search.ddg_search import search_web
+import os
+
+from dotenv import load_dotenv
+
+from .search.serper_search import search_serper
 from .scraper.scraper import scrape_url
+
+
+load_dotenv()
 
 def print_results(results):
     if not results:
@@ -26,7 +33,10 @@ def interactive():
             print("Exiting...")
             break
 
-        results = search_web(q, max_results=5)
+        results = search_serper(q, max_results=5)
+        if results is None and not os.environ.get("SERPER_API_KEY"):
+            print("SERPER_API_KEY is missing. Add it to your environment or .env file.")
+            continue
         print_results(results)
         if not results:
             continue
@@ -71,7 +81,7 @@ def main():
         return
 
     if args.query:
-        results = search_web(args.query, max_results=args.max_results)
+        results = search_serper(args.query, max_results=args.max_results)
         print_results(results)
     else:
         interactive()

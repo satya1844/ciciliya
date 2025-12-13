@@ -13,7 +13,7 @@ import logging
 load_dotenv()
 
 # Import your existing RAG pipeline
-from .pipelines.chat_pipeline import run_rag
+from .pipelines.chat_pipeline import run_rag, run_rag_stream
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -90,28 +90,31 @@ async def query_endpoint(request: QueryRequest):
     try:
         logger.info(f"Received query: {request.query}")
         
-        # Run the existing RAG pipeline
         result = await run_rag(
             query=request.query,
             max_results=request.max_sources
         )
-        
-        # Format sources
-        formatted_sources = []
-        for source in result.get("sources", []):
-            formatted_sources.append(Source(
+
+        if not result.get("success"):
+            message = result.get("error", "Unknown pipeline failure.")
+            logger.error(f"Pipeline failed: {message}")
+            raise HTTPException(status_code=502, detail=message)
+
+        formatted_sources = [
+            Source(
                 url=source.get("url", ""),
                 title=source.get("title", "Untitled"),
-                snippet=source.get("snippet")
-            ))
-        
-        # Create response
+                snippet=source.get("snippet"),
+            )
+            for source in result.get("sources", [])
+        ]
+
         response = QueryResponse(
             answer=result.get("answer", "Sorry, I couldn't find an answer."),
             sources=formatted_sources,
             query=request.query
         )
-        
+
         logger.info(f"Query processed successfully. Sources: {len(formatted_sources)}")
         return response
         
@@ -140,33 +143,21 @@ async def stream_endpoint(request: QueryRequest):
             # Send initial event
             yield f"data: {json.dumps({'type': 'start', 'query': request.query})}\n\n"
             
-            # Run RAG pipeline
-            result = await run_rag(
+            async for event in run_rag_stream(
                 query=request.query,
                 max_results=request.max_sources
-            )
-            
-            answer = result.get("answer", "Sorry, I couldn't find an answer.")
-            sources = result.get("sources", [])
-            
-            # Stream the entire answer as a single token to preserve markdown
-            if answer:
-                yield f"data: {json.dumps({'type': 'token', 'content': answer})}\n\n"
-                await asyncio.sleep(0.05)  # Small delay
-            
-            # Send sources at the end
-            formatted_sources = [
-                {
-                    "url": s.get("url", ""),
-                    "title": s.get("title", "Untitled"),
-                    "snippet": s.get("snippet")
-                }
-                for s in sources
-            ]
-            
-            yield f"data: {json.dumps({'type': 'sources', 'sources': formatted_sources})}\n\n"
+            ):
+                payload = {"type": event.get("type")}
+                if event.get("type") == "token":
+                    payload["content"] = event.get("data", "")
+                elif event.get("type") == "sources":
+                    payload["sources"] = event.get("data", [])
+                elif event.get("type") == "error":
+                    payload["error"] = event.get("data", "")
+
+                yield f"data: {json.dumps(payload)}\n\n"
+
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
-            
             logger.info("Stream completed successfully")
             
         except Exception as e:

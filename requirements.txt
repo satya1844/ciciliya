@@ -13,3 +13,5 @@ sentence-transformers
 chromadb
 tiktoken
 lxml
+groq
+langchain

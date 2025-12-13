@@ -1,51 +1,63 @@
+import asyncio
 import pytest
-from unittest.mock import patch, MagicMock
-from src.llm.groq_client import GroqClient
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
-@pytest.fixture
-def mock_groq_client():
-    """Fixture to mock the Groq API client."""
-    with patch('src.llm.groq_client.Groq') as mock_groq:
-        mock_instance = MagicMock()
-        mock_groq.return_value = mock_instance
-        yield mock_instance
+import src.llm.groq_client as groq_client
 
-def test_groq_client_answer_generation(mock_groq_client):
-    """
-    Tests that the GroqClient correctly formats the prompt and returns the response.
-    """
-    # Mock the API response
-    mock_response = MagicMock()
-    mock_response.choices[0].message.content = "This is a test answer."
-    mock_groq_client.chat.completions.create.return_value = mock_response
 
-    client = GroqClient()
-    question = "What is testing?"
-    contexts = ["Context 1", "Context 2"]
-    
-    answer = client.answer(question, contexts)
+def test_get_groq_response_returns_content(monkeypatch):
+    mock_create = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="This is a test answer."))]
+        )
+    )
+    mock_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=mock_create))
+    )
 
-    # Verify the prompt structure
-    mock_groq_client.chat.completions.create.assert_called_once()
-    call_args = mock_groq_client.chat.completions.create.call_args
-    messages = call_args.kwargs['messages']
-    
-    assert messages[0]['role'] == 'system'
-    assert "strictly using the provided sources" in messages[0]['content']
-    assert messages[1]['role'] == 'user'
-    assert "Question:\nWhat is testing?" in messages[1]['content']
-    assert "[Source 1]\nContext 1" in messages[1]['content']
-    assert "[Source 2]\nContext 2" in messages[1]['content']
+    monkeypatch.setattr(groq_client, "client", mock_client)
+    monkeypatch.setattr(groq_client, "MODELS", ["test-model"])
 
-    # Verify the answer
+    answer = asyncio.run(groq_client.get_groq_response("What is testing?", context="Test context"))
+
     assert answer == "This is a test answer."
+    mock_create.assert_awaited_once()
 
-def test_groq_client_no_context(mock_groq_client):
-    """
-    Tests that the client returns a specific message when no context is provided.
-    """
-    client = GroqClient()
-    answer = client.answer("Any question", [])
-    
-    assert answer == "No sufficient context found."
-    mock_groq_client.chat.completions.create.assert_not_called()
+
+def test_get_groq_response_raises_when_all_models_fail(monkeypatch):
+    mock_create = AsyncMock(side_effect=RuntimeError("model unavailable"))
+    mock_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=mock_create))
+    )
+
+    monkeypatch.setattr(groq_client, "client", mock_client)
+    monkeypatch.setattr(groq_client, "MODELS", ["unavailable-model"])
+
+    with pytest.raises(Exception):
+        asyncio.run(groq_client.get_groq_response("question", context="ctx"))
+
+
+def test_get_groq_response_stream_yields_tokens(monkeypatch):
+    async def fake_stream():
+        yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="Hel"))])
+        yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="lo"))])
+
+    mock_create = AsyncMock(return_value=fake_stream())
+    mock_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=mock_create))
+    )
+
+    monkeypatch.setattr(groq_client, "client", mock_client)
+    monkeypatch.setattr(groq_client, "MODELS", ["stream-model"])
+
+    async def collect_tokens():
+        gathered = []
+        async for token in groq_client.get_groq_response_stream("hi", context="ctx"):
+            gathered.append(token)
+        return gathered
+
+    tokens = asyncio.run(collect_tokens())
+
+    assert tokens == ["Hel", "lo"]
+    mock_create.assert_awaited_once()

@@ -1,22 +1,65 @@
-
-
 import React, { useState, useEffect, useRef } from "react";
 import { chatAPI } from "../services/api";
-import { useDarkMode } from "../contexts/DarkModeContext";
 import Loader from "./Loader";
-import DarkModeToggle from "./darkModeToggleButton";
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MessageBubble from "./MessageBubble";
+import grainyTexture from "../styles/grainy.png";
+const CubeIcon = () => (
+  <svg
+    aria-hidden="true"
+    viewBox="0 0 32 32"
+    xmlns="http://www.w3.org/2000/svg"
+    className="h-8 w-8 text-white"
+  >
+    <path
+      d="M16 3.5 4.5 9.5v13l11.5 6 11.5-6v-13Z"
+      fill="currentColor"
+      opacity="0.12"
+    />
+    <path
+      d="M16 3.5 4.5 9.5l11.5 6 11.5-6Z"
+      fill="currentColor"
+    />
+    <path
+      d="m16 28.5 11.5-6v-13L16 15.5v13Z"
+      fill="currentColor"
+      opacity="0.28"
+    />
+    <path
+      d="m16 28.5-11.5-6v-13L16 15.5v13Z"
+      fill="currentColor"
+      opacity="0.44"
+    />
+  </svg>
+);
+
+const ArrowIcon = ({ className = "h-5 w-5" }) => (
+  <svg
+    aria-hidden="true"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      d="m6.75 17.25 6.5-6.5-6.5-6.5M10 10.75h7.25"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+    />
+  </svg>
+);
 
 function ChatInterface() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [useStreaming, setUseStreaming] = useState(true);
-  
-  const { isDarkMode } = useDarkMode();
+  const [useStreaming] = useState(true);
+
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
+
+  const hasStreamingMessage = messages.some((msg) => msg.isStreaming);
 
   // Helper to clean escaped markdown
   const cleanMarkdownText = (text) => {
@@ -172,154 +215,77 @@ function ChatInterface() {
   };
 
   return (
-    <div className={`max-w-3xl mx-auto flex justify-center p-5 font-jersey relative transition-colors duration-300 ${
-      isDarkMode ? 'text-white' : 'text-black'
-    }`}>
-      <div className="absolute top-4 right-2 z-50">
-        <DarkModeToggle />
-      </div>
-
+    <section
+      className="page relative flex min-h-screen w-full items-center justify-center overflow-hidden px-6 py-16 text-white"
+      style={{
+        backgroundImage: `url(${grainyTexture})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      }}
+    >
       <div
-        ref={messagesContainerRef}
-        className={`absolute w-[759px] h-[350px] pt-10 overflow-y-auto mx-0 scrollbar-hide top-[65px] transition-colors duration-300`}
-        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-      >
-        {messages.map((msg) => (
-          <div key={msg.id} className="mb-3">
-            {msg.sender === "bot" ? (
-              <div className="flex items-start">
-                <div className="mr-1 mt-1 flex-shrink-0">
-                  {(msg.isStreaming && !msg.text.trim()) || (isLoading && !msg.text.trim()) ? (
-                    <Loader />
-                  ) : (
-                    <div className="w-5 h-5 bg-blue-600 rounded-full"></div>
-                  )}
-                </div>
+        aria-hidden="true"
+        className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.08),_transparent_58%)]"
+      />
+     
+
+     
+
+      <div className="relative z-10 w-full max-w-4xl space-y-10">
+        
+
+              <div
+                ref={messagesContainerRef}
+                className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto pr-2"
+              >
                 
-                <div className={`rounded-xl break-words text-left w-[90%] rounded-tl-[30px] rounded-bl-[30px] rounded-br-[30px] ${
-                  isDarkMode ? 'text-white' : 'text-black'
-                } ${msg.text.trim() ? 'p-3' : 'pt-1'}`}>
-                  <div className="text-base markdown-content">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        p: ({node, ...props}) => (
-                          <p className="mb-3 leading-relaxed last:mb-0" {...props} />
-                        ),
-                        h2: ({node, ...props}) => (
-                          <h2 className="text-xl font-bold mb-2 mt-4 first:mt-0" {...props} />
-                        ),
-                        h3: ({node, ...props}) => (
-                          <h3 className="text-lg font-bold mb-2 mt-3 first:mt-0" {...props} />
-                        ),
-                        strong: ({node, ...props}) => (
-                          <strong className={`font-bold ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`} {...props} />
-                        ),
-                        em: ({node, ...props}) => (
-                          <em className="italic" {...props} />
-                        ),
-                        ul: ({node, ...props}) => (
-                          <ul className="list-disc list-outside ml-5 mb-3 space-y-1" {...props} />
-                        ),
-                        ol: ({node, ...props}) => (
-                          <ol className="list-decimal list-outside ml-5 mb-3 space-y-1" {...props} />
-                        ),
-                        li: ({node, ...props}) => (
-                          <li className="leading-relaxed" {...props} />
-                        ),
-                        code: ({node, inline, ...props}) => {
-                          if (inline) {
-                            return (
-                              <code 
-                                className={`px-1.5 py-0.5 rounded text-sm font-mono ${
-                                  isDarkMode ? 'bg-gray-700 text-green-300' : 'bg-gray-200 text-red-600'
-                                }`}
-                                {...props}
-                              />
-                            );
-                          }
-                          return (
-                            <code 
-                              className={`block p-3 rounded-md text-sm font-mono overflow-x-auto mb-3 ${
-                                isDarkMode ? 'bg-gray-800 text-green-300' : 'bg-gray-100 text-gray-800'
-                              }`}
-                              {...props}
-                            />
-                          );
-                        },
-                        hr: ({node, ...props}) => (
-                          <hr className={`my-4 border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`} {...props} />
-                        ),
-                        a: ({node, ...props}) => (
-                          <a 
-                            className={`underline ${isDarkMode ? 'text-blue-300 hover:text-blue-200' : 'text-blue-600 hover:text-blue-800'}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            {...props}
-                          />
-                        ),
-                      }}
-                    >
-                      {cleanMarkdownText(msg.text)}
-                    </ReactMarkdown>
-                    {msg.isStreaming && (
-                      <span className="inline-block animate-pulse text-blue-500 ml-1">▋</span>
-                    )}
+                {messages.map((msg) => (
+                  <MessageBubble
+                    key={msg.id}
+                    message={cleanMarkdownText(msg.text)}
+                    isUser={msg.sender === "user"}
+                    sources={msg.sources}
+                  />
+                ))}
+                {isLoading && !hasStreamingMessage && (
+                  <div className="flex justify-center py-4">
+                    <Loader />
                   </div>
-                  
-                  {msg.sources && msg.sources.length > 0 && (
-                    <div className={`mt-3 pt-3 border-t ${isDarkMode ? 'border-white/20' : 'border-gray-300'}`}>
-                      <p className="text-sm font-semibold opacity-75 mb-2">Sources:</p>
-                      <div className="space-y-1">
-                        {msg.sources.map((source, index) => (
-                          <div key={index} className="text-xs">
-                            <span className="opacity-60">[{index + 1}]</span>{' '}
-                            <a
-                              href={source.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`underline ${
-                                isDarkMode ? 'text-blue-300 hover:text-blue-200' : 'text-blue-600 hover:text-blue-800'
-                              }`}
-                            >
-                              {source.title}
-                            </a>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                )}
+                <div ref={messagesEndRef} />
               </div>
-            ) : (
-              <div className="p-3 rounded-tl-[30px] rounded-bl-[30px] rounded-br-[30px] px-4 bg-[#0057FF] text-white ml-auto text-right w-fit">
-                <p className="text-base">{msg.text}</p>
-              </div>
-            )}
-          </div>
-        ))}
 
-        <div ref={messagesEndRef} />
-      </div>
-
-      <div className="rounded-3xl p-7 bg-[#0057FF] text-white absolute w-[759px] top-107">
-        <form onSubmit={handleSubmit}>
-          <h1 className="text-2xl font-bold border border-white p-3 jersey-10-regular rounded-2xl flex justify-between items-center">
+              <form className="w-full" onSubmit={handleSubmit}>
+          <label className="sr-only" htmlFor="chat-interface-input">
+            Ask anything
+          </label>
+          <div className="flex items-center rounded-[36px] border border-white/12 bg-[#030303] px-6 py-4 shadow-[0_24px_52px_rgba(0,0,0,0.45)] backdrop-blur-md sm:px-8 sm:py-5">
             <input
+              id="chat-interface-input"
               type="text"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Ask anything.."
-              className="keep-blue-bg bg-[#0057FF] border-none outline-none text-white placeholder-cyan-300 flex-1"
+              placeholder="lezz goooo..."
+              className="flex-1  text-sm text-white placeholder-white/60 outline-none md:text-base"
               disabled={isLoading}
             />
-            <button type="submit" disabled={isLoading}>
-              <p>{isLoading ? "..." : "Submit"}</p>
+            <button
+              type="submit"
+              disabled={isLoading || !message.trim()}
+              className="ml-4 flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#362932] transition hover:bg-[#f4f1ff] focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span className="sr-only">Send message</span>
+              {isLoading ? (
+                <ArrowIcon className="h-5 w-5 animate-pulse" />
+              ) : (
+                <ArrowIcon />
+              )}
             </button>
-          </h1>
+          </div>
         </form>
       </div>
-    </div>
+    </section>
   );
 }
 

@@ -1,5 +1,4 @@
 # src/scraper/scraper.py
-from multiprocessing import context
 from .web_scraper import fetch_html
 from .content_extractor import extract_readable
 

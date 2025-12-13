@@ -36,7 +36,7 @@ def search_serper(query: str, max_results: int = 5) -> Optional[List[Dict]]:
                 results.append({
                     "title": item.get("title", "No Title"),
                     "url": item.get("link", ""),
-                    "description": item.get("snippet", ""),
+                    "snippet": item.get("snippet", ""),
                 })
         
         return results

@@ -1,11 +1,20 @@
 import chromadb
 from chromadb.utils import embedding_functions
-from langchain.docstore.document import Document
-from typing import List
+from typing import List, Dict, Any, Optional
+
+class Document:
+    """Simple Document class to replace langchain.docstore.document.Document"""
+    def __init__(self, page_content: str, metadata: Dict[str, Any] = None):
+        self.page_content = page_content
+        self.metadata = metadata if metadata is not None else {}
+
 
 class ChromaDBManager:
-    def __init__(self, path: str = "chroma_db"):
-        self.client = chromadb.PersistentClient(path=path)
+    def __init__(self, path: Optional[str] = "chroma_db"):
+        if path:
+            self.client = chromadb.PersistentClient(path=path)
+        else:
+            self.client = chromadb.Client()
         self.sentence_transformer_ef = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="all-MiniLM-L6-v2"
         )
